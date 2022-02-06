@@ -275,7 +275,7 @@ def flatten_and_normalize(arr):
     norms = np.linalg.norm(arr, ord=2, axis=-1)
     norms[norms == 0] = 1 # remove zero division problems
 
-    return arr / norms
+    return arr / norms[:, np.newaxis]
 
 
 def compute_sam(a, b):
@@ -291,7 +291,7 @@ def compute_sam(a, b):
     # normalize each array per pixel, so the dot product will be determined only by the angle
     a = flatten_and_normalize(a)
     b = flatten_and_normalize(b)
-    angles = np.dot(a, b)
+    angles = np.sum(a * b, axis=1)
     sams   = np.arccos(angles)
 
     return sams.mean()
