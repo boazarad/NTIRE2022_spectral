@@ -12,6 +12,11 @@ from Conf import ANALOG_CHANNEL_GAIN, TYPICAL_SCENE_REFLECTIVITY, MAX_VAL_8_BIT,
 
 
 def load_ms_filter(csv):
+    """
+    Load a 16 channel Multi-Spectral filter in the format specified by 'resources/MS_Camera_QE.csv'
+    :param csv: path to source CSV file
+    :return: filter, filter bands, and filter peaks as numpy arrays
+    """
     df = pd.read_csv(csv, skiprows=[1])
     ms_filter = df.iloc[:, 1:17].to_numpy()
     bands = df['Channel'].to_numpy()
@@ -22,6 +27,12 @@ def load_ms_filter(csv):
     return ms_filter, bands, ms_peaks
 
 def load_rgb_filter(csv):
+    """
+    Load a three channel RGB filter in the format specified by 'resources/RGB_Camera_QE.csv'
+
+    :param csv: path to source CSV file
+    :return: camera filter and filter bands as numpy arrays
+    """
     df = pd.read_csv(csv)
     camera_filter = df[['R', 'G1', 'B']].to_numpy() * ANALOG_CHANNEL_GAIN
     bands = df['Wavelength[nm]'].to_numpy()
@@ -33,7 +44,6 @@ def addPoissonAndDarkNoise(signal, divFactorTo_1PE=1, npe=1):
     Add camera noise, based on Poisson and Gaussian Normal dark noise model.
 
     :param signal: Input signal. Can be of any numeric type, with any array dimensionality. Default units: [Npe]
-    :param darkNoise: dark noise standard deviation. Units: [Npe]
     :param divFactorTo_1PE: (Optional) modifier for converting the input signal to Npe units.
     :param npe: (Optional) The target Npe units. USE ONLY in conjunction with divFactorTo_1PE, or if input image is already in Npe units. 0 means no shot noise
 
@@ -65,7 +75,7 @@ def addNoise(rgb, npe=1, div_factor_to_1npe=1):
 
 def make_spectral_bands(nm_start, nm_stop, nm_step, dtype=np.int32):
     """
-    boilerplate code to make a uniform spectral wavelength range
+    Boilerplate code to make a uniform spectral wavelength range
 
     :param nm_start: start wavelength in [nm]
     :param nm_stop:  stop wavelength (inclusive) in [nm]
@@ -109,7 +119,7 @@ def resampleHSPicked(cube, bands, newBands, interpMode='linear', fill_value='ext
 
 def projectCube(pixels, filters, clipNegative=False):
     """
-    project multispectral pixels to low dimension
+    Project multispectral pixels to low dimension using a filter function (such as a camera response)
 
     :param pixels: numpy array of multispectral pixels, shape [..., num_hs_bands]
     :param filters: filter response, [num_hs_bands, num_mc_chans]
@@ -135,8 +145,15 @@ def projectCube(pixels, filters, clipNegative=False):
 
 def projectHS(cube, cube_bands, qes, qe_bands, clipNegative, interp_mode='linear'):
     """
-    project a spectral array
+    Project a spectral array
 
+    :param cube: Input hyperspectral cube
+    :param cube_bands: bands of hyperspectral cube
+    :param qes: filter response to use for projection
+    :param qe_bands: bands of filter response
+    :param clipNegative: clip values below 0
+    :param interp_mode: interpolation mode for missing values
+    :return:
     :return: numpy array of projected data, shape [..., num_channels ]
     """
     if not np.all(qe_bands == cube_bands):  # then sample the qes on the data bands
@@ -170,6 +187,15 @@ def projectHS(cube, cube_bands, qes, qe_bands, clipNegative, interp_mode='linear
 
 
 def createNoisyRGB(cube, cube_bands, rgb_filter, filter_bands, npe):
+    """
+    Generate a noisy RGB image from a spectral cube
+    :param cube: Source spectral cube
+    :param cube_bands: Bands of spectral cube
+    :param rgb_filter: RGB filter for projection
+    :param filter_bands: Bands of RGB filter
+    :param npe: Noise parameters - defined in "number of photo-electrons"
+    :return: RGB image
+    """
     rgb         = projectHS(cube, cube_bands, rgb_filter, filter_bands, clipNegative=True)
     noisy_rgb   = addNoise(rgb, npe=npe)
 
@@ -177,6 +203,12 @@ def createNoisyRGB(cube, cube_bands, rgb_filter, filter_bands, npe):
 
 
 def save_jpg(rgb, path, quality):
+    """
+    Save an RGB image as a JPEG file
+    :param rgb: Input RGB image
+    :param path: Destination JPEG filename as full path
+    :param quality: JPEG quality setting
+    """
     # scale to 8bit
     rgb *= (TYPICAL_SCENE_REFLECTIVITY / rgb.mean()) * MAX_VAL_8_BIT
     rgb = rgb.clip(0, MAX_VAL_8_BIT).astype(np.uint8)
@@ -185,17 +217,32 @@ def save_jpg(rgb, path, quality):
     bgr = cv.cvtColor(rgb, cv.COLOR_RGB2BGR)
     cv.imwrite(path, bgr, [cv.IMWRITE_JPEG_QUALITY, quality])
 
+
 def loadCube(path):
+    """
+    Load a spectral cube from Matlab HDF5 format .mat file
+    :param path: Path of souce file
+    :return: spectral cube (cube) and bands (bands)
+    """
     with h5py.File(path, 'r') as mat:
         cube = np.array(mat['cube']).T
         cube_bands = np.array(mat['bands']).squeeze()
     return cube, cube_bands
 
+
 def saveCube(path, cube, bands=None, norm_factor=None):
+    """
+    Save a spectra cube in Matlab HDF5 format
+    :param path: Destination filename as full path
+    :param cube: Spectral cube as Numpy array
+    :param bands: Bands of spectral cube as Numpy array
+    :param norm_factor: Normalization factor to source image counts
+    """
     hdf5storage.write({u'cube': cube,
                        u'bands': bands,
                        u'norm_factor': norm_factor}, '.',
                        path, matlab_compatible=True)
+
 
 def create_multispectral(cube, cube_bands, ms_filter, ms_filter_bands):
     ms = projectHS(cube, cube_bands, ms_filter, ms_filter_bands, clipNegative=True)
@@ -270,6 +317,11 @@ def compute_psnr(a, b, peak):
 
 
 def flatten_and_normalize(arr):
+    """
+    Vectorize a NxMxC matrix and normalize it for error calculation
+    :param arr: Array to vectorize
+    :return: Normalized N*MxC array
+    """
     h, w, c = arr.shape
     arr = arr.reshape([h * w, c])
     norms = np.linalg.norm(arr, ord=2, axis=-1)
@@ -295,6 +347,7 @@ def compute_sam(a, b):
     sams   = np.arccos(angles)
 
     return sams.mean()
+
 
 def computeMRAE(groundTruth, recovered):
     """
