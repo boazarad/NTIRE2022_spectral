@@ -313,7 +313,7 @@ def compute_psnr(a, b, peak):
     sqrd_error = compute_mse(a, b)
     mse = sqrd_error.mean()
     # TODO do we want to take psnr of every pixel first and then mean?
-    return 10 * np.log10((peak ^ 2) / mse)
+    return 10 * np.log10((peak ** 2) / mse)
 
 
 def flatten_and_normalize(arr):
